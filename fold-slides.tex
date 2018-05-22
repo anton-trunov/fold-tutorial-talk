@@ -1,0 +1,878 @@
+% !TEX TS-program = lualatex
+
+\documentclass[lualatex]{beamer}
+\usepackage{hyperref}
+\usepackage{fontspec}
+\usepackage{fontawesome}
+\usepackage{mathtools}
+\usepackage{mathabx}
+\usepackage{relsize}
+\renewcommand{\_}{\textscale{.6}{\textunderscore}}
+
+\usetheme{Boadilla}
+\usecolortheme{beaver}
+%% the metropolis theme is not compatible with fontawesome package
+%% \usetheme[progressbar=frametitle]{metropolis}
+
+\usepackage{appendixnumberbeamer}
+
+\usepackage{booktabs}
+\usepackage[scale=2]{ccicons}
+
+\usepackage{pgfplots}
+\usepgfplotslibrary{dateplot}
+
+\usepackage{xspace}
+\newcommand{\themename}{\textbf{\textsc{metropolis}}\xspace}
+
+% turn off figures and tables numberings
+\usepackage{caption}
+\captionsetup[figure]{labelformat=empty}
+\captionsetup[table]{labelformat=empty}
+
+%source code
+\usepackage{listings}
+\lstset{
+  language=Haskell,
+  basicstyle=\fontsize{11}{13}\ttfamily,
+  breaklines=true,
+  keepspaces=true,
+  numbersep=5pt,
+  showspaces=false,
+  columns=fullflexible,
+  mathescape
+}
+
+%images
+\usepackage{graphicx}
+
+%commutative diagrams
+\usepackage{tikz-cd}
+
+\usepackage{color}
+
+\begin{document}
+
+\title[fold tutorial]{A tutorial on the universality and expressiveness of fold}
+\subtitle{by Graham Hutton}
+\date[May 2018]{Papers We Love. Mad \\ Madrid, Spain}
+\author[A. Trunov \& J. Domínguez]{narrated by Anton Trunov \& Jesús Domínguez}
+\institute[IMDEA]{IMDEA Software Institute \\ Madrid, Spain}
+
+
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Who we are}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Anton Trunov}
+I'm a research programmer at \href{https://software.imdea.org}{IMDEA Software Institute} \\
+\includegraphics[width=107mm]{IMDEA_Software.jpg}
+\vspace{5mm}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{l c r}
+  {\Large {\color{orange} \faStackOverflow}} \href{https://www.stackoverflow.com/users/2747511/anton-trunov}{anton-trunov} &
+  {\Large {\color{cyan} \faTwitter}} \href{https://twitter.com/Anton_A_Trunov}{@Anton\_A\_Trunov} &
+  {\Large {\color{black} \faGithub}} \href{https://www.github.com/anton-trunov}{anton-trunov}
+\end{tabular}
+\end{frame}
+
+\begin{frame}[fragile]{Jesús Domínguez}
+I'm a PhD student at \href{https://software.imdea.org}{IMDEA Software Institute}
+% Maybe it is better to remove this picture already?
+%\includegraphics[width=107mm]{IMDEA_Software.jpg}
+
+\vspace{5mm}
+
+My interests include:
+\begin{itemize}
+\item Type Theory
+\item Logic
+\item Concurrency
+\item Semantics of programming languages
+\end{itemize}
+
+\vspace{5mm}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{l c r}
+  {\Large {\color{orange} \faStackOverflow}} \href{https://stackoverflow.com/users/9714364/jes%c3%bas-dom%c3%adnguez}{jesus-dominguez} &
+  {\Large {\color{cyan} \faTwitter}} \href{https://twitter.com/jeshecdom}{@jeshecdom} &
+  {\Large {\color{black} \faGithub}} \href{https://github.com/jeshecdom}{jeshecdom}
+\end{tabular}
+\end{frame}
+
+\begin{frame}[fragile]{Why we love the paper}
+\Large
+\begin{itemize}
+\item Highly readable
+\item Starts with the basics
+\item Teaches how to calculate functions' \emph{implementations}
+\item Good overview of the area
+\end{itemize}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Motivational examples}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Can you see the pattern here?}
+\begin{columns}
+\column{0.45\textwidth}
+\begin{lstlisting}[language=Haskell]
+sum :: [Int] -> Int
+sum [] = 0
+sum (x:xs) = x + (sum xs)
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell]
+all :: [Bool] -> Bool
+all [] = True
+all (x:xs) = x && (all xs)
+\end{lstlisting}
+\pause
+\column{0.55\textwidth}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+length :: [a] -> Int
+length [] = 0
+length (_:xs) = 1 + (length xs)
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+map :: (a -> b) -> [a] -> [b]
+map f [] = []
+map f (x:xs) = (f x) : (map f xs)
+\end{lstlisting}
+\end{columns}
+\begin{columns}
+\column{0.5\textwidth}
+\begin{center}
+% f and v are free variables here
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={rec}]]
+rec :: [a] -> b
+rec [] = v
+rec (x:xs) = x `f` (rec xs)
+\end{lstlisting}
+\end{center}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{More examples of the same pattern}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+reverse :: [a] -> [a]
+reverse [] = []
+reverse (x:xs) = x `snoc` (reverse xs)
+  where snoc x xs = xs ++ [x]
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+filter :: (a -> Bool) -> [a] -> [a]
+filter p [] = []
+filter p (x:xs) = x ?: (filter p xs)
+  where (?:) x xs = if p x then x : xs else xs
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+(++) :: [a] -> [a] -> [a]
+(++) [] ys = ys
+(++) (x:xs) ys = x : ((++) xs ys)
+\end{lstlisting}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Definition of foldr}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Abstracting out the pattern}
+% in Haskell, the real type of foldr is
+% Foldable t => (a -> b -> b) -> b -> t a -> b
+% but we would not mention it during the talk
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldr :: (a -> b -> b) -> b -> [a] -> b
+foldr f v [] = v
+foldr f v (x:xs) = x `f` (foldr f v xs)
+\end{lstlisting}
+\end{frame}
+
+%% We are going to concentrate on finite lists only
+\begin{frame}[fragile]{What does fold do?}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldr ($\oslash$) v [x$_1$, x$_2$, x$_3$, ..., x$_{n-1}$ x$_n$]
+  =
+x$_1$ $\oslash$ (x$_2$ $\oslash$ (x$_3$ $\oslash$ ... (x$_{n-1}$ $\oslash$ (x$_n$ $\oslash$ v)) ... ))
+\end{lstlisting}
+% Notice that the parentheses associate to the right,
+% hence the standard Haskell name for fold -- foldr
+\vspace{5mm}
+Compare with
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+x$_1$ : (x$_2$ : (x$_3$ : ... (x$_{n-1}$ : (x$_n$ : [])) ... ))
+\end{lstlisting}
+\pause
+\begin{itemize}
+\item{\texttt{foldr} ``replaces'' (\texttt{:}) with $\oslash$}
+\item{and \texttt{[]} with \texttt{v}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Let's reimplement the functions we already saw}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+sum = foldr (+) 0
+x$_1$ + (x$_2$ + (x$_3$ + ... (x$_{n-1}$ + (x$_n$ + 0)) ... ))
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+all = foldr (&&) True
+x$_1$ && (x$_2$ && (x$_3$ && ... (x$_{n-1}$ && (x$_n$ && True)) ... ))
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+length = foldr (const (1+)) 0
+1 + (1 + (1 + ... (1 + (1 + 0)) ... )))
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+map f = foldr (\x r -> f x : r) []
+f x$_1$ : (f x$_2$ : (f x$_3$ : ... (f x$_{n-1}$ : (f x$_n$ : [])) ... ))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Let's reimplement the functions we've already seen}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+reverse = foldr snoc []
+  where snoc x xs = xs ++ [x]
+x$_1$ `snoc` (x$_2$ `snoc` ... (x$_{n-1}$ `snoc` (x$_n$ `snoc` [])) ... )
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+filter p (x:xs) = foldr (?:) []
+  where (?:) x xs = if p x then x : xs else xs
+x$_1$ ?: (x$_2$ ?: (x$_3$ ?: ... (x$_{n-1}$ ?: (x$_n$ ?: [])) ... ))
+\end{lstlisting}
+\pause
+%% (++) has actually different shape
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+(++) xs ys = foldr (:) ys xs
+-- or, in the point-free style: (++) = flip (foldr (:))
+x$_1$ : (x$_2$ : (x$_3$ : ... (x$_{n-1}$ : (x$_n$ : ys)) ... ))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Advantages of using fold}
+\Large
+\begin{itemize}
+\item{Less boilerplate -- we don't repeat the recursion scheme}
+\item{Can be easier to understand -- the essence of the algorithm can be seen clearer} %% (once you build intuition on how fold works)
+\item{The code can be constructed in a systematic manner}
+\item{Easier code transformations}
+\item{Makes it easier to prove the properties of functions}
+\end{itemize}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{dropWhile example}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%dropWhile is a primitive recursive function.
+%So, is fold weaker???
+%fold is powerful enough to encode any primitive recursive function
+%(as long as your language has pair types),
+
+\begin{frame}[fragile]{fold is \emph{not} a silver bullet}
+
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile p [] = []
+dropWhile p (x:xs) = if p x then dropWhile p xs else x : xs
+\end{lstlisting}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+-- example:
+dropWhile even [4,2,1,2,3,4,5] = [1,2,3,4,5]
+\end{lstlisting}
+\pause
+The folding function \texttt{f} gets
+\begin{itemize}
+\item{the head of the list \texttt{x}}
+\pause
+\item{the result of calling \texttt{fold} on tail}
+\pause
+\[
+\underbrace{x_1}_\text{head} \oslash
+\underbrace{(x_2 \oslash (x_3 \oslash ... (x_{n-1} \oslash (x_n \oslash v)) ... ))}_\text{foldr f v [$x_2$, ..., $x_n$]}
+\]
+\pause
+\item{but not the tail itself!}
+\end{itemize}
+\end{frame}
+%% So, let's see how we can implement tail using fold
+\begin{frame}[fragile]{fold is \emph{not} a silver bullet}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+tail :: [a] -> [a]
+tail [] = []          -- Exception in Haskell
+tail (_:xs) = xs
+\end{lstlisting}
+\pause
+% this is basically Kleene's definition of the predecessor function for the Church numerals
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+tail :: [a] -> [a]
+tail = snd . foldr (\x (xs, acc) -> (x : xs, xs)) ([], [])
+\end{lstlisting}
+\pause
+Example:
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldr (\x (xs, acc) -> (x : xs, xs)) ([], []) [$x_1$, $x_2$, $x_3$]
+\end{lstlisting}\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+[] ==> ([], [])
+\end{lstlisting}\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+x$_3$ ==> ([x$_3$], [])
+\end{lstlisting}\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+x$_2$ ==> ([x$_2$, x$_3$], [x$_3$])
+\end{lstlisting}\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+x$_1$ ==> ([x$_1$, x$_2$, x$_3$], [x$_2$, x$_3$])
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{foldr is \emph{not} a silver bullet}
+Let's get back to \texttt{dropWhile}:
+\vspace{5mm}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile p = snd . foldr f ([], [])
+  where
+    f x (xs, rec) = (x : xs, if p x then rec else x : xs)
+\end{lstlisting}
+\pause
+Compare to:
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile p [] = []
+dropWhile p (x:xs) = if p x then dropWhile p xs else x : xs
+\end{lstlisting}
+\vspace{5mm}
+Programs written using \texttt{fold} can be less readable than programs written using explicit recursion.
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Iterators and recursors}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Iterators vs recursors}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldr :: (a -> b -> b) -> b -> [a] -> b
+foldr f v [] = v
+foldr f v (x:xs) = f x (foldr f v xs)
+\end{lstlisting}
+\vspace{10mm}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldrRec}]
+foldrRec :: (a -> [a] -> b -> b) -> b -> [a] -> b
+foldrRec f v [] = v
+foldrRec f v (x:xs) = f x xs (foldrRec f v xs)
+\end{lstlisting}
+\vspace{5mm}
+\texttt{foldr} is called an \emph{iterator} a.k.a \emph{catamorphism}\\
+\texttt{foldrRec} is called a \emph{recursor} a.k.a \emph{paramorphism}\\
+\texttt{foldrRec} implements a pattern called \emph{primitive recursion}
+\end{frame}
+
+\begin{frame}[fragile]{dropWhile again}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldrRec}]
+foldrRec :: (a -> [a] -> b -> b) -> b -> [a] -> b
+foldrRec f v [] = v
+foldrRec f v (x:xs) = f x xs (foldrRec f v xs)
+\end{lstlisting}
+\vspace{15mm}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile p = foldrRec
+                (\x xs rec -> if p x then rec else x : xs)
+                []
+\end{lstlisting}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Expressivity of fold}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{foldrRec via foldr}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldrRec}]
+foldr :: (a -> b -> b) -> b -> [a] -> b
+foldr f = foldrRec (const . f)
+\end{lstlisting}
+\vspace{15mm}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldrRec}]
+foldrRec :: (a -> [a] -> b -> b) -> b -> [a] -> b
+foldrRec f v = snd . foldr g ([], v)
+  where
+    g x (xs, rec) = (x : xs, f x xs rec)
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Definitions of foldl}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+foldl :: (b -> a -> b) -> b -> [a] -> b
+foldl f v [] = v
+foldl f v (x:xs) = foldl f (f v x) xs
+\end{lstlisting}
+\pause
+% The parentheses associate to the left
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldl ($\obackslash$) v [x$_1$, x$_2$, x$_3$, ..., x$_{n-1}$ x$_n$]
+  =
+(...(((v $\obackslash$ x$_1$) $\obackslash$ x$_2$) $\obackslash$ x$_3$) ... $\obackslash$ x$_{n-1}$) $\obackslash$ x$_n$
+\end{lstlisting}
+\pause
+\hspace{4mm}$\mathrlap{\lefttorightarrow}\mid$
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+x$_n$ $\oslash$ (x$_{n-1}$ $\oslash$ ... (x$_3$ $\oslash$ (x$_2$ $\oslash$ (x$_1$ $\oslash$ v))) ... )
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+  =
+(foldr (flip ($\obackslash$)) v) . reverse
+\end{lstlisting}
+\pause
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+foldl :: (b -> a -> b) -> b -> [a] -> b
+foldl f v = (foldr (flip f) v) . reverse
+\end{lstlisting}
+%% reverse is expressible via fold, so right now we have expressed
+%% foldl as a composition of two folds
+\end{frame}
+
+% now we can kind of merge reverse and list traversal, using deferred computation
+% we are going to be simulating a stack
+%% foldl :: (b -> a -> b) -> b -> [a] -> b
+%% foldl f v xs = foldr (\x rec -> (\w -> rec (f w x))) id xs v
+%% or equivalently
+%% foldl f v xs = foldr (\x rec -> rec . flip f x) id xs v
+
+\begin{frame}[fragile]{Definitions of foldl}
+  %% (foldr (flip f) v) . (foldr snoc []) =
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+foldl ($\obackslash$) v xs
+  =
+(...(((v $\obackslash$ x$_1$) $\obackslash$ x$_2$) $\obackslash$ x$_3$) ... $\obackslash$ x$_{n-1}$) $\obackslash$ x$_n$
+\end{lstlisting}
+\pause
+% employing our intuition we got from the reverse implementation
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+  =
+($\obackslash$ x$_n$) . ($\obackslash$ x$_{n-1}$) ... . ($\obackslash$ x$_3$) . ($\obackslash$ x$_2$) . ($\obackslash$ x$_1$) $\textdollar$ v
+\end{lstlisting}
+\pause
+% we lack the rightmost function which corresponds to the case of empty list
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+  =
+id . ($\obackslash$ x$_n$) . ($\obackslash$ x$_{n-1}$) ... . ($\obackslash$ x$_3$) . ($\obackslash$ x$_2$) . ($\obackslash$ x$_1$) $\textdollar$ v
+\end{lstlisting}
+\pause
+% composition is associative
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+  =
+((...((id . ($\obackslash$ x$_n$)) . ($\obackslash$ x$_{n-1}$)) ... .
+    ($\obackslash$ x$_3$)) . ($\obackslash$ x$_2$)) . ($\obackslash$ x$_1$) $\textdollar$ v
+\end{lstlisting}
+\pause
+%% we got foldr written backwards, because now the last elements of the list are the innermost
+\begin{lstlisting}[language=Haskell, morekeywords={foldr,foldl}]
+  =
+foldr (\x rec -> rec . ($\obackslash$ x)) id xs v
+\end{lstlisting}
+\end{frame}
+%% Note that foldl is not of the form "foldr f v"
+
+%% Further notes:
+%% There are some useful ‘duality theorems’ concerning [fold] and [foldl],
+%% and also guidelines for deciding which operator is best suited to particular applications in the "Introduction to Functional Programming using Haskell" book by Ruchard Bird
+%% The Haskell community has produced a number of best practices, especially
+%% with regard to laziness/strictness.
+
+%% So far we have seen that foldr + tuples give greater expressivity
+%% But in this talk we probably won't touch upon the fact that
+%% foldr + higher-order functions gives us more that just primitive recursion --
+%% we can express Ackermann's function in the higher-order setting
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Universal Property and Category Theory}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Universal Property of fold}
+
+\begin{theorem}
+Given $f: a \rightarrow b \rightarrow b$, $v: b$, and $g: [a] \rightarrow b$, we have,
+\begin{align*}
+\begin{split}
+g\;[\:] & = v \\
+g\;(x:xs) & = f\;x\;(g\;xs)
+\end{split}\quad
+\Longleftrightarrow\quad
+g = fold\;f\;v
+\end{align*}
+\end{theorem}
+
+\end{frame}
+
+\begin{frame}[fragile]{Universal Property of fold}
+
+How to prove this?
+\[
+(+1)\;.\;sum = fold\;(+)\;1
+\]
+\pause
+By universal property:
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+((+1)\;.\;sum)\;[\;] & = 1 \\
+((+1)\;.\;sum)\;(x : xs) & = (+)\;x\;(((+1)\;.\;sum)\;xs)
+\end{align*}
+\begin{align*}
+sum\;[\;] + 1 & = 1 \\
+sum\;(x : xs) + 1 & = x + (sum\;xs + 1)
+\end{align*}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+g\;[\:] & = v \\
+g\;(x:xs) & = f\;x\;(g\;xs)
+\end{align*}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+\begin{frame}[fragile]{Universal Property of fold: List objects}
+%Let $C$ be a category with a terminal object $1$ and binary products.
+
+%A \alert{list object} $L(A)$ over some object $A$, consists of two arrows,
+%\[
+%nil: 1 \rightarrow L(A)
+%cons: A \times L(A) \rightarrow L(A)
+%\]
+%such that for any other object $B$ and two arrows,
+%\[
+%v: 1 \rightarrow B
+%f: A \times B \rightarrow B
+%\]
+%there is a unique arrow $fold(f,v): L(A) \rightarrow B$ making the following diagrams commute:
+\centering
+\begin{tikzcd}
+1 \arrow[r, "nil" above] & L(A) & A \times L(A) \arrow[r, "cons" above] & L(A)
+\end{tikzcd}
+
+\begin{tikzcd}
+1 \arrow[r, "v" above] & B & A \times B \arrow[r, "f" above] & B
+\end{tikzcd}
+
+\begin{tikzcd}[column sep=huge]
+L(A) \arrow[r, "\exists !\;fold\;f\;v" above, dashed] & B
+\end{tikzcd}
+
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\centering
+\begin{tikzcd}
+1 \arrow[rd, "v\quad" left, near end] \arrow[r, "nil" above] & L(A) \arrow[d, "fold\;f\;v" right] \\
+& B
+\end{tikzcd}
+
+\[
+(fold\;f\;v) \circ nil = v
+\]
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{tikzcd}
+A \times L(A) \arrow[d,"id_A \times (fold\;f\;v)" left] \arrow[r, "cons" above] & L(A) \arrow[d, "fold\;f\;v" right] \\
+A \times B \arrow[r, "f" below] & B
+\end{tikzcd}
+
+\begin{align*}
+(fold\;f\;v) \circ cons = f \circ (id_A \times fold\;f\;v) \\
+(fold\;f\;v)\;(cons\;(x, l)) = \\ 
+f\;((id_A \times fold\;f\;v) (x, l)) = \\
+f\;(x, fold\;f\;v\;l)
+\end{align*}
+
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Universal Property of fold: Initial Algebras}
+
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+F_A\;X & :\equiv 1 + A \times X \\
+map\;F_A\;f & :\equiv id_1 + id_A \times f
+\end{align*}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{tikzcd}
+X \arrow[dd, "f" left] & 1 + A \times X \arrow[dd, "id_1 + id_A \times f" right]\\
+\  \arrow[r, "map\;F_A\;f", mapsto] & \  \\
+Y & 1 + A \times Y
+\end{tikzcd}
+\end{column}
+\end{columns}
+
+\centering
+\begin{tikzcd}
+F_A\;L(A) \arrow[r, "In" above] & L(A)
+\end{tikzcd}
+
+\begin{tikzcd}
+F_A\;B \arrow[r, "f" above] & B
+\end{tikzcd}
+
+\begin{tikzcd}[column sep=huge]
+L(A) \arrow[r, "\exists !\;cata\;f" above, dashed] & B
+\end{tikzcd}
+
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{tikzcd}
+F_A\;L(A) \arrow[d,"map\;F_A\;(cata\;f)" left] \arrow[r, "In" above] & L(A) \arrow[d, "cata\;f" right] \\
+F_A\;B \arrow[r, "f" below] & B
+\end{tikzcd}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{align*}
+(cata\;f) \circ In & = f \circ (map\;F_A\;(cata\;f)) \\
+                   & = f \circ (id_1 + id_A \times (cata\;f))
+\end{align*}
+\end{column}
+\end{columns}
+
+% You can obtain the equations for the fold of your datatype by changing the functor
+% and extracting the equations from the general commutative diagram for the initial algebra
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% \section{Generalization to other datatypes}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Fold and other datatypes}
+% But there is an easier way to obtain how the fold (or catamorphism) for your datatype should look like.
+% From the universal property for fold, we see that if we apply fold with the
+% constructors for the list, the universal property says that the fold is equal
+% to the identity function.
+% So, a general rule of what a catamorphism should do is that it must behave like the identity
+% function when applied on the constructors.
+
+\begin{align*}
+\begin{split}
+id\;[\:] & = [\:] \\
+id\;(x:xs) & = (:)\;x\;(id\;xs)
+\end{split}\quad
+\Longleftrightarrow\quad
+id = fold\;(:)\;[\:]
+\end{align*}
+\pause
+% 1) A fold or catamorphism should pattern match on the constructors of the datatype and resolve base cases by providing constants as result.
+% 2) For non-base cases, it must recurse on the subcomponents.
+% 3) At the end, it must apply a function to aggregate all the results.
+
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+foldr :: (a -> b -> b) -> b -> [a] -> b
+foldr f v [] = v
+foldr f v (x:xs) = f x (foldr f v xs)
+\end{lstlisting}
+
+\end{frame}
+
+\begin{frame}[fragile]{Fold (catamorphism) and trees}
+\begin{lstlisting}[language=Haskell]
+data LTree a = 
+   Leaf a | Split (LTree a) (LTree a)
+data BTree a = 
+   Empty | Node a (BTree a) (BTree a)
+\end{lstlisting}
+\pause
+
+%1) The catamorphism consumes something of the datatype into an arbitrary type
+\begin{lstlisting}[language=Haskell, morekeywords={cata_LTree, cata_BTree}]
+cata_LTree :: ....... -> LTree a -> b
+cata_BTree :: ....... -> BTree a -> b
+\end{lstlisting}
+\pause
+
+%2) Each parameter corresponds to a constructor, where each occurrence of the datatype in the constructor is replaced by the target type b
+\begin{lstlisting}[language=Haskell, morekeywords={cata_LTree, cata_BTree}]
+cata_LTree :: (b -> b -> b) -> (a -> b) -> LTree a -> b
+cata_BTree :: (a -> b -> b -> b) -> b -> BTree a -> b
+\end{lstlisting}
+
+Since:
+
+\begin{lstlisting}[language=Haskell]
+Split :: LTree a -> LTree a -> LTree a
+Leaf :: a -> LTree a
+Node :: a -> BTree a -> BTree a -> BTree a
+Empty :: BTree a
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Fold (catamorphism) and trees}
+\begin{lstlisting}[language=Haskell, morekeywords={cata_LTree}]
+cata_LTree :: (b -> b -> b) -> (a -> b) -> LTree a -> b
+cata_LTree fs fl (Leaf x) = fl x
+cata_LTree fs fl (Split l r) = 
+  fs (cata_LTree fs fl l) (cata_LTree fs fl r)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Haskell, morekeywords={cata_BTree}]
+cata_BTree :: (a -> b -> b -> b) -> b -> BTree a -> b
+cata_BTree fn v Empty = v
+cata_BTree fn v (Node x l r) = 
+  fn x (cata_BTree fn v l) (cata_BTree fn v r)
+\end{lstlisting}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\section{Recursion Schemes}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% "Sorting morphisms" by L. Augusteijn(1999)
+%% - insertion sort -- catamorphism over list
+%% - merge sort can be expressed as a morphism over the leaf tree data type
+%% - quick sort and heap sort can be expressed as morphisms over the binary tree data type
+
+% This is what a catamorphism does in general: replacing the constructors of a data type by other functions.
+
+%\begin{frame}[fragile]{Catamorphisms}
+%We already know that \texttt{fold} is a list catamorphism.
+% just a reminder and also the following style will feel more familiar
+%\begin{lstlisting}[language=Haskell]
+%data List a =
+%  Nil |
+%  Cons a (List a)
+%\end{lstlisting}
+%\pause
+%\begin{lstlisting}[language=Haskell]
+%list_cata :: u -> (a -> u -> u) -> List a -> u
+%list_cata v fc = cata where
+%  cata Nil = v
+%  cata (Cons x xs) = fc x (cata xs)
+%\end{lstlisting}
+%\end{frame}
+
+%\begin{frame}[fragile]{Catamorphisms}
+%\begin{lstlisting}[language=Haskell]
+%data LfTree x =
+%   Leaf x
+% | Split (LeafTree x) (LfTree x)
+%\end{lstlisting}
+%\pause
+%\begin{lstlisting}[language=Haskell]
+%leaftree_cata :: (x -> u) -> (u -> u -> u) -> LfTree x -> u
+%leaftree_cata fl fs = cata where
+%  cata (Leaf x) = fl x
+%  cata (Split l r) = fs (cata l) (cata r)
+%\end{lstlisting}
+%\end{frame}
+
+%\begin{frame}[fragile]{Catamorphisms}
+%\begin{lstlisting}[language=Haskell]
+%data BinTree x =
+%  Tip |
+%  Branch x (BinTree x) (BinTree x)
+%\end{lstlisting}
+%\pause
+%\begin{lstlisting}[language=Haskell]
+%bintree_cata :: u -> (x -> u -> u -> u) -> BinTree x -> u
+%bintree_cata v f = cata where
+%  cata Tip = v
+%  cata (Branch x l r) = f x (cata l) (cata r)
+%\end{lstlisting}
+%\end{frame}
+
+%% all the morphisms should be generated by the compiler
+
+
+%% \item catamorphism (Greek: κατά "downwards" and μορφή "form, shape") \\
+%% A \emph{catamorphism} on a type T is a function of type T → U that destruct and object of type T according to the structure of T,
+%% calls itself recursively of any components of T that are also of type T and
+%% combines this recursive result with the remaining components of T to a U.
+
+% ?? insert the picture from Sorting morphisms (page 3)
+% It can be observed that this catamorphism replaces the empty list by a and the non-empty list constructor (:) by f.
+
+
+
+%%% Probably we should move these into their respective slides
+%% \begin{frame}[fragile]{Terminology}
+%% \Large
+%% \begin{itemize}
+  %% \item TODO
+  %% \item catamorphism (Greek: κατά "downwards" and μορφή "form, shape") \\
+  %% \item anamorphism (ἀνά = "upwards") \\
+  %% \item hylomorphism (ὕλη = "wood, matter") \\
+  %% \item paramorphism (παρά = "close together")
+%% \end{itemize}
+%% \end{frame}
+
+%% \begin{frame}[fragile]{Sorting algorithms}
+%% Fixing a recursion scheme underlying an implementation can give us a particular sorting algorithm
+%% See Sorting morphims in the links file
+%% \Large
+%% \begin{itemize}
+  %% \item The value of this approach is not so much in obtaining a nice implementation of some algorithm, but in unraveling its structure.
+%% \end{itemize}
+%% \end{frame}
+
+\begin{frame}[fragile]{Compiler optimizations: rewrite rules}
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+{-# RULES
+  "map" [~1] forall f xs.
+             map f xs =
+             build (\c n -> foldr (mapFB c f) n xs)
+-}
+\end{lstlisting}
+
+where
+\begin{lstlisting}[language=Haskell, morekeywords={foldr}]
+build :: (forall b. (a -> b -> b) -> b -> b) -> [a]
+build g = g (:) []
+
+mapFB :: (e -> lst -> lst) -> (a -> e) -> a -> lst -> lst
+mapFB c f = \x ys -> c (f x) ys
+\end{lstlisting}
+%% the above code is taken from
+%% http://git.haskell.org/ghc.git (libraries/base/GHC/Base.hs)
+
+The equations guiding the compiler must be correct!
+\end{frame}
+
+\begin{frame}[fragile]{Advantage: Reasoning made easier!}
+Interactive session in Coq: the fusion property of \texttt{fold}.
+\end{frame}
+
+\begin{frame}[fragile]{Outro}
+\huge
+Thank you!
+
+\vspace{10mm}
+
+Get in touch with us after the talk!
+
+\vspace{10mm}
+\Large
+\href{https://github.com/anton-trunov/fold-tutorial-talk}{github.com/anton-trunov/fold-tutorial-talk}
+
+\end{frame}
+
+\begin{frame}[fragile]{Outro}
+\Huge
+Questions?
+\end{frame}
+\end{document}
